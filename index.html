@@ -114,16 +114,18 @@ function parties(){
 function stmt(id){
  const p=P(id);$('#ttl').textContent='كشف حساب: '+p.name;let r=0;
  const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div></div>`});
- html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>`)}
+ html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div><button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`)}
 
 function itemForm(id){
  const it=id?I(id):{name:'',qty:0,cost:'',price:''};ctx={id};
  html(`<div class="card"><label>اسم الصنف</label><input id="nm" value="${esc(it.name)}"><label>الكمية بالمخزن</label><input type="number" inputmode="decimal" id="q" value="${it.qty}">
  <label>سعر الشراء</label><input type="number" inputmode="decimal" id="c" value="${it.cost}"><label>سعر البيع</label><input type="number" inputmode="decimal" id="p" value="${it.price}">
- <button class="btn" onclick="saveItem()">حفظ</button></div>`)}
+ <button class="btn" onclick="saveItem()">حفظ</button>${id?'<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delItem()">🗑 مسح الصنف</button>':''}</div>`)}
 function saveItem(){const nm=$('#nm').value.trim();if(!nm)return toast('اكتب اسم الصنف');
  const o={name:nm,qty:+$('#q').value||0,cost:+$('#c').value||0,price:+$('#p').value||0};
  let it;if(ctx.id){it=I(ctx.id);Object.assign(it,o)}else{it={id:uid(),...o};S.items.push(it)}persist('items',it);save();toast('تم الحفظ');go('stock')}
+function delItem(){const it=I(ctx.id);if(!it||!confirm('مسح الصنف '+it.name+'؟ الفواتير القديمة هتفضل زي ما هي.'))return;S.items=S.items.filter(x=>x.id!==it.id);if(DB)DB.collection('items').doc(it.id).delete().catch(()=>toast('تعذر المسح'));save();toast('تم المسح');go('stock')}
+function delParty(id){if(S.txs.some(t=>t.pid===id))return toast('لهذا الطرف حركات، لا يمكن مسحه');if(!confirm('مسح هذا الطرف؟'))return;S.parties=S.parties.filter(x=>x.id!==id);if(DB)DB.collection('parties').doc(id).delete().catch(()=>toast('تعذر المسح'));save();toast('تم المسح');go('parties')}
 function stock(){
  const v=S.items.reduce((a,i)=>a+i.qty*i.cost,0);
  html(`<div class="card"><button class="btn sec" style="margin:0" onclick="go('item')">+ صنف جديد</button><div class="tot">قيمة المخزون: <b>${fmt(v)}</b></div></div>
