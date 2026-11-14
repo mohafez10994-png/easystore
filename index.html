@@ -64,8 +64,8 @@ function startSync(){unsubs.forEach(u=>u());unsubs=['parties','items','txs','log
 function loginScreen(){$('#back').style.visibility='hidden';$('#ttl').textContent='تسجيل الدخول';html(`<div class="card"><label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username"><label>كلمة المرور</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" onclick="doLogin()">دخول</button><div class="empty" id="lerr"></div></div>`)}
 function doLogin(){firebase.auth().signInWithEmailAndPassword($('#em').value.trim(),$('#pw').value).catch(()=>{$('#lerr').textContent='بيانات الدخول غير صحيحة'})}
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
-const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',backup:'نسخة احتياطية'};
-const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs};
+const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',aging:'أعمار الديون',stmtp:'كشف حساب للإرسال',backup:'نسخة احتياطية'};
+const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs,aging,stmtp:a=>{sf='';st='';stmtView(a)}};
 let curArg,rf=today(),rt=today();
 function go(s,a){if(!canW()&&WR.includes(s))return toast('صلاحيتك للعرض فقط');cur=s;curArg=a;ctx=null;$('#ttl').textContent=T[s]||'';$('#back').style.visibility=s==='home'?'hidden':'visible';scr[s](a);scrollTo(0,0)}
 const html=h=>$('#app').innerHTML=h;
@@ -73,9 +73,9 @@ const opts=(arr,sel)=>arr.map(([v,l])=>`<option value="${esc(v)}"${v===sel?' sel
 
 function home(){
  const cash=S.txs.reduce((a,t)=>a+cashOf(t),0),td=S.txs.filter(t=>t.k==='sale'&&t.d===today()).reduce((a,t)=>a+t.total,0);
- const tiles=[['sale','🧾'],['purchase','📥'],['payin','🤝'],['payout','💸'],['expense','📒'],['return','↩️'],['preturn','↪️'],['party','➕'],['parties','📇'],['item','🏷️'],['stock','📦'],['cash','🏦'],['rep','📊'],['logs','📜'],['backup','💾']];
+ const tiles=[['sale','🧾'],['purchase','📥'],['payin','🤝'],['payout','💸'],['expense','📒'],['return','↩️'],['preturn','↪️'],['party','➕'],['parties','📇'],['item','🏷️'],['stock','📦'],['cash','🏦'],['rep','📊'],['aging','⏳'],['logs','📜'],['backup','💾']];
  html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(cash)}</b></div><div><small>مبيعات اليوم</small><b>${fmt(td)}</b></div></div>
- <div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
+ <div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup','aging'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
 
 function invForm(k){
  ctx={k,lines:[{iid:'',q:1,p:0}],total:0};const isP=k==='purchase'||k==='preturn',pt=isP?'supplier':'customer';
@@ -122,7 +122,7 @@ function parties(){
 function stmt(id){
  const p=P(id);$('#ttl').textContent='كشف حساب: '+p.name;let r=0;
  const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${t.id}')">🗑</button>`:''}</div>`});
- html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>${canD()?`<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`:''}`)}
+ html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><button class="btn sec" style="margin:0 0 12px" onclick="go('stmtp','${id}')">🖨 كشف للطباعة / إرسال للعميل</button><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>${canD()?`<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`:''}`)}
 
 function itemForm(id){
  const it=id?I(id):{name:'',qty:0,cost:'',price:''};ctx={id};
@@ -154,6 +154,42 @@ function logs(){const L=(S.logs||[]).slice().sort((a,b)=>b.ts-a.ts).slice(0,150)
 function dl(name,rows){const c='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));a.download=name+'-'+today()+'.csv';a.click()}
 function exportCSV(){dl('الحركات',[['الرقم','النوع','التاريخ','الطرف','الإجمالي','المدفوع','المتبقي','ملاحظات','بواسطة']].concat(S.txs.map(t=>[t.no||'',K[t.k],t.d,(P(t.pid)||{}).name||'نقدي',t.total,t.paid,t.total-t.paid,t.note||'',t.by||''])))}
 function exportItems(){dl('الأصناف',[['الصنف','الكمية','سعر الشراء','سعر البيع']].concat(S.items.map(i=>[i.name,i.qty,i.cost,i.price])))}
+let sf='',st='';
+function stmtView(id){
+ const p=P(id);if(!p)return go('parties');$('#ttl').textContent='كشف حساب: '+p.name;
+ const co=localStorage.getItem('es_co')||'';let r=0;const rows=[];
+ S.txs.filter(t=>t.pid===id).forEach(t=>{const d=delta(t);if(sf&&t.d<sf){r+=d;return}if(st&&t.d>st)return;r+=d;rows.push({t,d,r})});
+ const first=rows.length?rows[0].r-rows[0].d:r,fb=x=>(p.type==='customer'?(x>=0?'عليه ':'له '):(x>=0?'له ':'عليه '))+fmt(Math.abs(x));
+ html(`<div class="card no-print"><label>اسم الشركة (يظهر في الكشف)</label><input value="${esc(co)}" oninput="localStorage.setItem('es_co',this.value);$('#pco').textContent=this.value">
+ <div style="display:flex;gap:8px"><div style="flex:1"><label>من تاريخ</label><input type="date" value="${sf}" onchange="sf=this.value;stmtView('${id}')"></div><div style="flex:1"><label>إلى تاريخ</label><input type="date" value="${st}" onchange="st=this.value;stmtView('${id}')"></div></div>
+ <button class="btn" onclick="print()">🖨️ طباعة / حفظ PDF</button><button class="btn sec" onclick="waSend('${id}')">📤 إرسال ملخص على واتساب</button></div>
+ <div class="card"><h2 id="pco" style="text-align:center;margin:0 0 6px">${esc(co)}</h2><div style="text-align:center;font-weight:bold">كشف حساب ${p.type==='customer'?'عميل':'مورد'}: ${esc(p.name)}</div>
+ <div style="text-align:center">${p.phone?esc(p.phone)+' · ':''}${sf||st?'الفترة: '+(sf||'...')+' إلى '+(st||'...'):'حتى تاريخ '+today()}</div>
+ <div style="overflow-x:auto"><table style="font-size:13px"><tr><th>التاريخ</th><th>البيان</th><th>مستحقات</th><th>مدفوعات / مرتجعات</th><th>الرصيد</th></tr>
+ ${sf?`<tr><td colspan="4">رصيد سابق</td><td>${fmt(first)}</td></tr>`:''}
+ ${rows.map(({t,d,r})=>`<tr><td>${t.d}</td><td>${K[t.k]} ${t.no||''} ${esc(t.note||'')}</td><td>${d>0?fmt(d):''}</td><td>${d<0?fmt(-d):''}</td><td>${fmt(r)}</td></tr>`).join('')}</table></div>
+ <div class="row"><span>الرصيد الحالي</span><b>${fb(r)}</b></div></div>`)}
+function waSend(id){
+ const p=P(id),co=localStorage.getItem('es_co')||'';const L=[];S.txs.filter(t=>t.pid===id).forEach(t=>L.push(t.d+' '+K[t.k]+' '+fmt(t.total)));
+ const msg=(co?co+'\n':'')+'كشف حساب: '+p.name+'\nالرصيد الحالي: '+balTxt(p)+'\n\nآخر الحركات:\n'+L.slice(-8).join('\n');
+ let ph=(p.phone||'').replace(/\D/g,'');if(ph.startsWith('0'))ph='2'+ph;
+ window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msg),'_blank')}
+function aging(ty){
+ ty=typeof ty==='string'?ty:'customer';const now=new Date(today()),T=[0,0,0,0];
+ const list=S.parties.filter(p=>p.type===ty).map(p=>{
+  const tx=S.txs.filter(t=>t.pid===p.id).sort((a,b)=>a.d.localeCompare(b.d)||(a.ts||0)-(b.ts||0));let cr=0;const deb=[];
+  tx.forEach(t=>{const d=delta(t);if(d>0)deb.push({d:t.d,a:d});else cr-=d});
+  deb.forEach(x=>{const u=Math.min(x.a,cr);x.a-=u;cr-=u});
+  const b=[0,0,0,0];deb.forEach(x=>{if(x.a<=0.005)return;const days=Math.floor((now-new Date(x.d))/864e5);b[days<=30?0:days<=60?1:days<=90?2:3]+=x.a});
+  return{p,b,tot:b.reduce((a,c)=>a+c,0)}}).filter(x=>x.tot>0.005).sort((a,b)=>b.tot-a.tot);
+ list.forEach(x=>x.b.forEach((v,i)=>T[i]+=v));
+ html(`<div class="seg no-print">${[['customer','العملاء'],['supplier','الموردين']].map(([k,l])=>`<button class="${k===ty?'on':''}" onclick="aging('${k}')">${l}</button>`).join('')}</div>
+ <div class="card"><h3 style="margin:0 0 8px;text-align:center">أعمار الديون — ${ty==='customer'?'مستحق من العملاء':'مستحق للموردين'} — ${today()}</h3>
+ <div style="overflow-x:auto"><table style="font-size:12px"><tr><th>الاسم</th><th>0-30 يوم</th><th>31-60</th><th>61-90</th><th>+90</th><th>الإجمالي</th></tr>
+ ${list.map(x=>`<tr onclick="go('stmt','${x.p.id}')" style="cursor:pointer"><td style="text-align:right">${esc(x.p.name)}</td>${x.b.map(v=>'<td>'+(v?fmt(v):'-')+'</td>').join('')}<td><b>${fmt(x.tot)}</b></td></tr>`).join('')||'<tr><td colspan="6">لا توجد مديونيات</td></tr>'}
+ <tr><th>الإجمالي</th>${T.map(v=>'<th>'+fmt(v)+'</th>').join('')}<th>${fmt(T.reduce((a,c)=>a+c,0))}</th></tr></table></div>
+ <div class="empty">المدفوعات والمرتجعات بتتحسب على أقدم فاتورة الأول.</div></div>
+ <button class="btn no-print" onclick="print()">🖨️ طباعة / حفظ PDF</button>`)}
 function stock(){
  const v=S.items.reduce((a,i)=>a+i.qty*i.cost,0);
  html(`<div class="card"><button class="btn sec" style="margin:0" onclick="go('item')">+ صنف جديد</button><div class="tot">قيمة المخزون: <b>${fmt(v)}</b></div></div>
