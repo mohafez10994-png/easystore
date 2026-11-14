@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function me() { return request.auth.token.email; }
+    function admins() { return ['bisan@gmail.com', 'mido@gmail.com', 'anas@gmail.com']; }
+    function staff() { return ['none@example.com']; }
+    function viewers() { return ['none@example.com']; }
+    function isUser() { return request.auth != null && (me() in admins() || me() in staff() || me() in viewers()); }
+    function canWrite() { return request.auth != null && (me() in admins() || me() in staff()); }
+    match /{document=**} {
+      allow read: if isUser();
+      allow create, update: if canWrite();
+      allow delete: if request.auth != null && me() in admins();
+    }
+  }
+}

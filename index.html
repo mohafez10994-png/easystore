@@ -53,6 +53,9 @@ const bal=pid=>S.txs.filter(t=>t.pid===pid).reduce((a,t)=>a+delta(t),0);
 const balTxt=p=>{const b=bal(p.id);return (p.type==='customer'?(b>=0?'عليه ':'له '):(b>=0?'له ':'عليه '))+fmt(Math.abs(b))};
 let DB=null,unsubs=[];
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+let ROLE='admin';
+const WR=['sale','purchase','return','preturn','payin','payout','expense','party','item'],canW=()=>ROLE!=='viewer',canD=()=>ROLE==='admin';
+function setRole(e){e=(e||'').toLowerCase();const R=window.ROLES||{};ROLE=(R.viewers||[]).includes(e)?'viewer':(R.staff||[]).includes(e)?'staff':(R.admins||[]).includes(e)?'admin':(R.admins?'staff':'admin')}
 const who=()=>{try{return firebase.auth().currentUser.email}catch(e){return''}};
 function logIt(m){if(DB)DB.collection('logs').add({ts:Date.now(),by:who(),m}).catch(()=>{})}
 function persist(col,o){if(col==='txs'&&!o.ts){o.ts=Date.now();o.by=who();logIt('سجّل '+K[o.k]+' '+(o.no||'')+' بقيمة '+fmt(o.total))}if(!DB)return;const d={...o};delete d.id;DB.collection(col).doc(o.id).set(d).catch(()=>toast('تعذر الحفظ، تأكد من الاتصال والصلاحية'))}
@@ -64,7 +67,7 @@ function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';se
 const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',backup:'نسخة احتياطية'};
 const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs};
 let curArg,rf=today(),rt=today();
-function go(s,a){cur=s;curArg=a;ctx=null;$('#ttl').textContent=T[s]||'';$('#back').style.visibility=s==='home'?'hidden':'visible';scr[s](a);scrollTo(0,0)}
+function go(s,a){if(!canW()&&WR.includes(s))return toast('صلاحيتك للعرض فقط');cur=s;curArg=a;ctx=null;$('#ttl').textContent=T[s]||'';$('#back').style.visibility=s==='home'?'hidden':'visible';scr[s](a);scrollTo(0,0)}
 const html=h=>$('#app').innerHTML=h;
 const opts=(arr,sel)=>arr.map(([v,l])=>`<option value="${esc(v)}"${v===sel?' selected':''}>${esc(l)}</option>`).join('');
 
@@ -72,7 +75,7 @@ function home(){
  const cash=S.txs.reduce((a,t)=>a+cashOf(t),0),td=S.txs.filter(t=>t.k==='sale'&&t.d===today()).reduce((a,t)=>a+t.total,0);
  const tiles=[['sale','🧾'],['purchase','📥'],['payin','🤝'],['payout','💸'],['expense','📒'],['return','↩️'],['preturn','↪️'],['party','➕'],['parties','📇'],['item','🏷️'],['stock','📦'],['cash','🏦'],['rep','📊'],['logs','📜'],['backup','💾']];
  html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(cash)}</b></div><div><small>مبيعات اليوم</small><b>${fmt(td)}</b></div></div>
- <div class="grid">${tiles.map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
+ <div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
 
 function invForm(k){
  ctx={k,lines:[{iid:'',q:1,p:0}],total:0};const isP=k==='purchase'||k==='preturn',pt=isP?'supplier':'customer';
@@ -118,14 +121,14 @@ function parties(){
  html(S.parties.length?`<input placeholder="🔍 بحث" oninput="filt(this.value)" style="margin-bottom:10px"><div class="card srch">${S.parties.map(p=>`<div class="row" onclick="go('stmt','${p.id}')"><div>${esc(p.name)}<small>${p.type==='customer'?'عميل':'مورد'} ${esc(p.phone)}</small></div><b>${balTxt(p)}</b></div>`).join('')}</div>`:'<div class="empty">لا يوجد عملاء أو موردين بعد</div>')}
 function stmt(id){
  const p=P(id);$('#ttl').textContent='كشف حساب: '+p.name;let r=0;
- const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${t.id}')">🖨</button><button class="x" onclick="delTx('${t.id}')">🗑</button></div>`});
- html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div><button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`)}
+ const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${t.id}')">🗑</button>`:''}</div>`});
+ html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>${canD()?`<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`:''}`)}
 
 function itemForm(id){
  const it=id?I(id):{name:'',qty:0,cost:'',price:''};ctx={id};
  html(`<div class="card"><label>اسم الصنف</label><input id="nm" value="${esc(it.name)}"><label>الكمية بالمخزن</label><input type="number" inputmode="decimal" id="q" value="${it.qty}">
  <label>سعر الشراء</label><input type="number" inputmode="decimal" id="c" value="${it.cost}"><label>سعر البيع</label><input type="number" inputmode="decimal" id="p" value="${it.price}">
- <button class="btn" onclick="saveItem()">حفظ</button>${id?'<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delItem()">🗑 مسح الصنف</button>':''}</div>`)}
+ <button class="btn" onclick="saveItem()">حفظ</button>${id&&canD()?'<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delItem()">🗑 مسح الصنف</button>':''}</div>`)}
 function saveItem(){const nm=$('#nm').value.trim();if(!nm)return toast('اكتب اسم الصنف');
  const o={name:nm,qty:+$('#q').value||0,cost:+$('#c').value||0,price:+$('#p').value||0};
  let it;if(ctx.id){it=I(ctx.id);Object.assign(it,o)}else{it={id:uid(),...o};S.items.push(it)}persist('items',it);save();toast('تم الحفظ');go('stock')}
@@ -158,7 +161,7 @@ function stock(){
 
 function cash(){
  const L=S.txs.map((t,i)=>({t,i,c:cashOf(t)})).filter(x=>x.c).sort((a,b)=>a.t.d.localeCompare(b.t.d)||a.i-b.i);let r=0;L.forEach(x=>{r+=x.c;x.r=r});
- html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(r)}</b></div></div><div class="card">${L.reverse().map(x=>{const p=P(x.t.pid);return`<div class="row"><div>${K[x.t.k]}<small>${x.t.d} ${p?esc(p.name):''} ${esc(x.t.note)}</small></div><div style="text-align:left" class="${x.c>0?'pos':'neg'}">${x.c>0?'+':''}${fmt(x.c)}<small>${fmt(x.r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${x.t.id}')">🖨</button><button class="x" onclick="delTx('${x.t.id}')">🗑</button></div>`}).join('')||'<div class="empty">لا توجد حركات</div>'}</div>`)}
+ html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(r)}</b></div></div><div class="card">${L.reverse().map(x=>{const p=P(x.t.pid);return`<div class="row"><div>${K[x.t.k]}<small>${x.t.d} ${p?esc(p.name):''} ${esc(x.t.note)}</small></div><div style="text-align:left" class="${x.c>0?'pos':'neg'}">${x.c>0?'+':''}${fmt(x.c)}<small>${fmt(x.r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${x.t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${x.t.id}')">🗑</button>`:''}</div>`}).join('')||'<div class="empty">لا توجد حركات</div>'}</div>`)}
 
 function rep(per){
  per=typeof per==='string'?per:'day';const td=today();
@@ -171,11 +174,11 @@ function rep(per){
  ${per==='range'?`<div class="card"><label>من</label><input type="date" value="${rf}" onchange="rf=this.value;rep('range')"><label>إلى</label><input type="date" value="${rt}" onchange="rt=this.value;rep('range')"></div>`:''}<div class="card">${R('المبيعات',sales)}${R('المرتجعات',ret)}${R('المشتريات',pur)}${R('إيرادات أخرى',inc)}${R('المصروفات',exp)}${R('صافي الربح التقريبي',profit,profit>=0?'pos':'neg')}</div>
  <div class="card">${R('مستحق من العملاء',sb('customer'))}${R('مستحق للموردين',sb('supplier'))}${R('قيمة المخزون (بسعر الشراء)',stk)}${R('رصيد الخزينة',S.txs.reduce((a,t)=>a+cashOf(t),0))}</div>
  <div class="empty">الربح = المبيعات − المرتجعات − تكلفة البضاعة المباعة + الإيرادات − المصروفات</div>`)}
-function backup(){html(`<div class="card"><button class="btn sec" style="margin:0 0 12px" onclick="firebase.auth().signOut()">تسجيل خروج</button><button class="btn" style="margin:0" onclick="exportData()">⬇️ تصدير نسخة احتياطية</button><button class="btn sec" onclick="exportCSV()">📊 تصدير الحركات (Excel)</button><button class="btn sec" onclick="exportItems()">📦 تصدير الأصناف (Excel)</button><label>استرجاع من نسخة سابقة</label><input type="file" accept=".json" onchange="importData(this.files[0])"></div><div class="empty">البيانات مشتركة بين كل الشركاء على السيرفر. خد نسخة احتياطية كل فترة.</div>`)}
+function backup(){html(`<div class="card"><button class="btn sec" style="margin:0 0 12px" onclick="firebase.auth().signOut()">تسجيل خروج</button><button class="btn" style="margin:0" onclick="exportData()">⬇️ تصدير نسخة احتياطية</button><button class="btn sec" onclick="exportCSV()">📊 تصدير الحركات (Excel)</button><button class="btn sec" onclick="exportItems()">📦 تصدير الأصناف (Excel)</button>${canD()?`<label>استرجاع من نسخة سابقة</label><input type="file" accept=".json" onchange="importData(this.files[0])">`:''}</div><div class="empty">البيانات مشتركة بين كل الشركاء على السيرفر. خد نسخة احتياطية كل فترة.<br>حسابك: ${esc(who())} (${{admin:'مدير',staff:'موظف',viewer:'عرض فقط'}[ROLE]})</div>`)}
 function exportData(){const b=new Blob([JSON.stringify(S)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='easystore-backup-'+today()+'.json';a.click()}
 function importData(f){if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.parties||!d.items||!d.txs)throw 0;S=d;S.parties.forEach(x=>persist('parties',x));S.items.forEach(x=>persist('items',x));S.txs.forEach(x=>persist('txs',x));save();toast('تم الاسترجاع');go('home')}catch(e){toast('ملف غير صالح')}};r.readAsText(f)}
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(!window.FB_CONFIG||/PASTE/.test(FB_CONFIG.apiKey)){$('#back').style.visibility='hidden';html('<div class="card"><b>لم يتم ربط التطبيق بقاعدة البيانات بعد.</b><div class="empty">افتح ملف www/firebase-config.js والصق بيانات مشروع Firebase (راجع README).</div></div>')}
 else{firebase.initializeApp(FB_CONFIG);DB=firebase.firestore();DB.enablePersistence({synchronizeTabs:true}).catch(()=>{});
-firebase.auth().onAuthStateChanged(u=>{if(!u){unsubs.forEach(x=>x());unsubs=[];loginScreen()}else{startSync();go('home')}})}
+firebase.auth().onAuthStateChanged(u=>{if(!u){unsubs.forEach(x=>x());unsubs=[];loginScreen()}else{setRole(u.email);startSync();go('home')}})}
 </script></body></html>
