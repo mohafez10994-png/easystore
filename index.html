@@ -54,7 +54,7 @@ const balTxt=p=>{const b=bal(p.id);return (p.type==='customer'?(b>=0?'عليه '
 let DB=null,unsubs=[];
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let ROLE='admin';
-const WR=['sale','purchase','return','preturn','payin','payout','expense','party','item','count'],canW=()=>ROLE!=='viewer',canD=()=>ROLE==='admin';
+const WR=['sale','purchase','return','preturn','payin','payout','expense','party','item','count','editinv'],canW=()=>ROLE!=='viewer',canD=()=>ROLE==='admin';
 function setRole(e){e=(e||'').toLowerCase();const R=window.ROLES||{};ROLE=(R.viewers||[]).includes(e)?'viewer':(R.staff||[]).includes(e)?'staff':(R.admins||[]).includes(e)?'admin':(R.admins?'staff':'admin')}
 const who=()=>{try{return firebase.auth().currentUser.email}catch(e){return''}};
 function logIt(m){if(DB)DB.collection('logs').add({ts:Date.now(),by:who(),m}).catch(()=>{})}
@@ -64,8 +64,8 @@ function startSync(){unsubs.forEach(u=>u());unsubs=['parties','items','txs','log
 function loginScreen(){$('#back').style.visibility='hidden';$('#ttl').textContent='تسجيل الدخول';html(`<div class="card"><label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username"><label>كلمة المرور</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" onclick="doLogin()">دخول</button><div class="empty" id="lerr"></div></div>`)}
 function doLogin(){firebase.auth().signInWithEmailAndPassword($('#em').value.trim(),$('#pw').value).catch(()=>{$('#lerr').textContent='بيانات الدخول غير صحيحة'})}
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
-const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',aging:'أعمار الديون',count:'جرد وتسوية المخزون',stmtp:'كشف حساب للإرسال',backup:'نسخة احتياطية'};
-const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs,aging,count,stmtp:a=>{sf='';st='';stmtView(a)}};
+const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',aging:'أعمار الديون',editinv:'تعديل مستند',count:'جرد وتسوية المخزون',stmtp:'كشف حساب للإرسال',backup:'نسخة احتياطية'};
+const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs,aging,count,editinv:a=>{const t=S.txs.find(x=>x.id===a);if(t)invForm(t.k,a)},stmtp:a=>{sf='';st='';stmtView(a)}};
 let curArg,rf=today(),rt=today();
 function go(s,a){if(!canW()&&WR.includes(s))return toast('صلاحيتك للعرض فقط');cur=s;curArg=a;ctx=null;$('#ttl').textContent=T[s]||'';$('#back').style.visibility=s==='home'?'hidden':'visible';scr[s](a);scrollTo(0,0)}
 const html=h=>$('#app').innerHTML=h;
@@ -77,14 +77,14 @@ function home(){
  html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(cash)}</b></div><div><small>مبيعات اليوم</small><b>${fmt(td)}</b></div></div>
  ${lowItems().length?`<div class="card" onclick="go('stock','low')" style="border-color:var(--bad);cursor:pointer">⚠️ ${lowItems().length} صنف وصل للحد الأدنى — اضغط للعرض</div>`:''}<div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup','aging'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
 
-function invForm(k){
- ctx={k,lines:[{iid:'',q:1,p:0}],total:0};const isP=k==='purchase'||k==='preturn',pt=isP?'supplier':'customer';
+function invForm(k,eid){
+ const et=eid?S.txs.find(x=>x.id===eid):null;ctx={k,eid:et?et.id:null,lines:et?et.lines.map(l=>({iid:(S.items.find(x=>x.name===l.n)||{}).id||'',q:l.q,p:l.p})):[{iid:'',q:1,p:0}],total:0};const isP=k==='purchase'||k==='preturn',pt=isP?'supplier':'customer';
  html(`<div class="card"><label>${isP?'المورد':'العميل'}</label><select id="pid"><option value="">${isP?'مورد نقدي':'عميل نقدي'}</option>${opts(S.parties.filter(p=>p.type===pt).map(p=>[p.id,p.name]))}</select>
  <label>التاريخ</label><input type="date" id="dt" value="${today()}">
  <label>الأصناف</label><div class="lh"><span>الصنف (المتاح)</span><span>الكمية</span><span>السعر</span><span></span></div><div id="lines"></div>
  <button class="btn sec" onclick="addLine()">+ إضافة صنف</button><div style="display:flex;gap:8px"><div style="flex:1"><label>خصم (مبلغ)</label><input type="number" inputmode="decimal" id="disc" oninput="calc()"></div><div style="flex:1"><label>ضريبة %</label><input type="number" inputmode="decimal" id="taxp" oninput="calc()"></div></div><div class="tot">الإجمالي: <b id="tot">0</b></div>
  <label>${k==='return'?'المبلغ المرتجع نقداً':k==='preturn'?'المبلغ المستلم نقداً':isP?'المدفوع للمورد':'المدفوع من العميل'} (اتركه فارغاً = كامل المبلغ)</label><input type="number" inputmode="decimal" id="paid">
- <label>ملاحظات</label><input id="note"><button class="btn" onclick="saveInv()">حفظ</button></div>`);drawLines()}
+ <label>ملاحظات</label><input id="note"><button class="btn" onclick="saveInv()">${et?'حفظ التعديل':'حفظ'}</button></div>`);if(et){$('#pid').value=et.pid||'';$('#dt').value=et.d;$('#disc').value=et.disc||'';$('#taxp').value=et.taxp||'';$('#paid').value=et.paid;$('#note').value=et.note||''}drawLines()}
 function drawLines(){
  $('#lines').innerHTML=ctx.lines.map((l,i)=>`<div class="ln"><select onchange="pick(${i},this.value)"><option value="">اختر</option>${opts(S.items.map(x=>[x.id,x.name+' ('+fmt(x.qty)+')']),l.iid)}</select><input type="number" inputmode="decimal" value="${l.q}" oninput="ctx.lines[${i}].q=+this.value;calc()"><input type="number" inputmode="decimal" value="${l.p}" oninput="ctx.lines[${i}].p=+this.value;calc()"><button class="x" onclick="ctx.lines.splice(${i},1);drawLines()">✕</button></div>`).join('')||'<div class="empty">لا توجد أصناف</div>';calc()}
 function pick(i,v){const it=I(v);ctx.lines[i].iid=v;ctx.lines[i].p=it?((ctx.k==='purchase'||ctx.k==='preturn')?it.cost:it.price):0;drawLines()}
@@ -93,8 +93,10 @@ function calc(){const sub=ctx.lines.reduce((a,l)=>a+(l.q||0)*(l.p||0),0),d=+$('#
 function saveInv(){
  const L=ctx.lines.filter(l=>l.iid&&l.q>0);if(!L.length)return toast('أضف صنفاً واحداً على الأقل');
  const pid=$('#pid').value,total=ctx.total;let paid=$('#paid').value===''?total:+$('#paid').value;if(!pid)paid=total;
- const lines=L.map(l=>{const it=I(l.iid);const c=it.cost;if(ctx.k==='sale'||ctx.k==='preturn')it.qty-=l.q;else{it.qty+=l.q;if(ctx.k==='purchase')it.cost=l.p}return{n:it.name,q:l.q,p:l.p,c}});
- const tx={id:uid(),no:nextNo(ctx.k),k:ctx.k,d:$('#dt').value||today(),pid,total,paid,sub:ctx.sub,disc:ctx.disc,taxp:ctx.taxp,note:$('#note').value,lines};S.txs.push(tx);L.forEach(l=>persist('items',I(l.iid)));persist('txs',tx);save();toast('تم الحفظ');go('inv',tx.id)}
+ const old=ctx.eid?S.txs.find(x=>x.id===ctx.eid):null;if(old)undoStock(old);const lines=L.map(l=>{const it=I(l.iid);const c=it.cost;if(ctx.k==='sale'||ctx.k==='preturn')it.qty-=l.q;else{it.qty+=l.q;if(ctx.k==='purchase')it.cost=l.p}return{n:it.name,q:l.q,p:l.p,c}});
+ const nw={d:$('#dt').value||today(),pid,total,paid,sub:ctx.sub,disc:ctx.disc,taxp:ctx.taxp,note:$('#note').value,lines};let tx;
+ if(old){tx=Object.assign(old,nw,{edited:who()});logIt('تعديل '+K[tx.k]+' '+(tx.no||'')+' إلى '+fmt(total))}else{tx={id:uid(),no:nextNo(ctx.k),k:ctx.k,...nw};S.txs.push(tx)}
+ L.forEach(l=>persist('items',I(l.iid)));persist('txs',tx);save();toast('تم الحفظ');go('inv',tx.id)}
 
 function payForm(k){
  const pt=k==='payin'?'customer':'supplier';ctx={k};
@@ -111,18 +113,18 @@ function expForm(){
 function saveExp(){const a=+$('#amt').value;if(!(a>0))return toast('أدخل المبلغ');
  const tx={id:uid(),k:$('#k').value,d:$('#dt').value||today(),pid:'',total:a,paid:a,note:$('#note').value,lines:[]};S.txs.push(tx);persist('txs',tx);save();toast('تم الحفظ');go('home')}
 
-function partyForm(){
- html(`<div class="card"><label>النوع</label><select id="type">${opts([['customer','عميل'],['supplier','مورد']])}</select><label>الاسم</label><input id="nm"><label>التليفون</label><input id="ph" type="tel">
- <label>رصيد سابق (اختياري)</label><input type="number" inputmode="decimal" id="ob"><button class="btn" onclick="saveParty()">حفظ</button></div>`)}
-function saveParty(){const nm=$('#nm').value.trim();if(!nm)return toast('اكتب الاسم');const id=uid();
+function partyForm(id){const p=id?P(id):null;ctx={id};
+ html(`<div class="card">${p?'':`<label>النوع</label><select id="type">${opts([['customer','عميل'],['supplier','مورد']])}</select>`}<label>الاسم</label><input id="nm" value="${esc(p?p.name:'')}"><label>التليفون</label><input id="ph" type="tel" value="${esc(p?p.phone:'')}">
+ ${p?'':'<label>رصيد سابق (اختياري)</label><input type="number" inputmode="decimal" id="ob">'}<button class="btn" onclick="saveParty()">حفظ</button></div>`)}
+function saveParty(){const nm=$('#nm').value.trim();if(!nm)return toast('اكتب الاسم');if(ctx&&ctx.id){const q=P(ctx.id);logIt('تعديل بيانات: '+q.name+' ← '+nm);q.name=nm;q.phone=$('#ph').value;persist('parties',q);save();toast('تم الحفظ');return go('stmt',ctx.id)}const id=uid();
  const pr={id,name:nm,phone:$('#ph').value,type:$('#type').value};S.parties.push(pr);persist('parties',pr);const o=+$('#ob').value;
  if(o){const tx={id:uid(),k:'open',d:today(),pid:id,total:o,paid:0,note:'',lines:[]};S.txs.push(tx);persist('txs',tx)}save();toast('تم الحفظ');go('parties')}
 function parties(){
  html(S.parties.length?`<input placeholder="🔍 بحث" oninput="filt(this.value)" style="margin-bottom:10px"><div class="card srch">${S.parties.map(p=>`<div class="row" onclick="go('stmt','${p.id}')"><div>${esc(p.name)}<small>${p.type==='customer'?'عميل':'مورد'} ${esc(p.phone)}</small></div><b>${balTxt(p)}</b></div>`).join('')}</div>`:'<div class="empty">لا يوجد عملاء أو موردين بعد</div>')}
 function stmt(id){
  const p=P(id);$('#ttl').textContent='كشف حساب: '+p.name;let r=0;
- const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${t.id}')">🗑</button>`:''}</div>`});
- html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><button class="btn sec" style="margin:0 0 12px" onclick="go('stmtp','${id}')">🖨 كشف للطباعة / إرسال للعميل</button><div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>${canD()?`<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`:''}`)}
+ const rows=S.txs.filter(t=>t.pid===id).map(t=>{r+=delta(t);return`<div class="row"><div>${K[t.k]}<small>${t.d} ${esc(t.note)} ${t.lines.map(l=>esc(l.n)+' ×'+l.q).join('، ')}</small></div><div style="text-align:left">${fmt(t.total)}<small>الرصيد ${fmt(r)}</small></div>${canW()&&['sale','purchase','return','preturn'].includes(t.k)?`<button class="x" style="color:var(--pri)" onclick="go('editinv','${t.id}')">✏️</button>`:''}<button class="x" style="color:var(--pri)" onclick="go('inv','${t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${t.id}')">🗑</button>`:''}</div>`});
+ html(`<div class="card"><b>${esc(p.name)}</b> — ${balTxt(p)}</div><button class="btn sec" style="margin:0 0 12px" onclick="go('stmtp','${id}')">🖨 كشف للطباعة / إرسال للعميل</button>${canW()?`<button class="btn sec" style="margin:0 0 12px" onclick="go('party','${id}')">✏️ تعديل البيانات (الاسم والتليفون)</button>`:''}<div class="card">${rows.reverse().join('')||'<div class="empty">لا توجد حركات</div>'}</div>${canD()?`<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delParty('${id}')">🗑 مسح ${p.type==='customer'?'العميل':'المورد'}</button>`:''}`)}
 
 function itemForm(id){
  const it=id?I(id):{name:'',qty:0,cost:'',price:''};ctx={id};
@@ -204,7 +206,7 @@ function stock(a){
 
 function cash(){
  const L=S.txs.map((t,i)=>({t,i,c:cashOf(t)})).filter(x=>x.c).sort((a,b)=>a.t.d.localeCompare(b.t.d)||a.i-b.i);let r=0;L.forEach(x=>{r+=x.c;x.r=r});
- html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(r)}</b></div></div><div class="card">${L.reverse().map(x=>{const p=P(x.t.pid);return`<div class="row"><div>${K[x.t.k]}<small>${x.t.d} ${p?esc(p.name):''} ${esc(x.t.note)}</small></div><div style="text-align:left" class="${x.c>0?'pos':'neg'}">${x.c>0?'+':''}${fmt(x.c)}<small>${fmt(x.r)}</small></div><button class="x" style="color:var(--pri)" onclick="go('inv','${x.t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${x.t.id}')">🗑</button>`:''}</div>`}).join('')||'<div class="empty">لا توجد حركات</div>'}</div>`)}
+ html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(r)}</b></div></div><div class="card">${L.reverse().map(x=>{const p=P(x.t.pid);return`<div class="row"><div>${K[x.t.k]}<small>${x.t.d} ${p?esc(p.name):''} ${esc(x.t.note)}</small></div><div style="text-align:left" class="${x.c>0?'pos':'neg'}">${x.c>0?'+':''}${fmt(x.c)}<small>${fmt(x.r)}</small></div>${canW()&&['sale','purchase','return','preturn'].includes(x.t.k)?`<button class="x" style="color:var(--pri)" onclick="go('editinv','${x.t.id}')">✏️</button>`:''}<button class="x" style="color:var(--pri)" onclick="go('inv','${x.t.id}')">🖨</button>${canD()?`<button class="x" onclick="delTx('${x.t.id}')">🗑</button>`:''}</div>`}).join('')||'<div class="empty">لا توجد حركات</div>'}</div>`)}
 
 function rep(per){
  per=typeof per==='string'?per:'day';const td=today();
