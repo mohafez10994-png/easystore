@@ -54,7 +54,7 @@ const balTxt=p=>{const b=bal(p.id);return (p.type==='customer'?(b>=0?'عليه '
 let DB=null,unsubs=[];
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let ROLE='admin';
-const WR=['sale','purchase','return','preturn','payin','payout','expense','party','item'],canW=()=>ROLE!=='viewer',canD=()=>ROLE==='admin';
+const WR=['sale','purchase','return','preturn','payin','payout','expense','party','item','count'],canW=()=>ROLE!=='viewer',canD=()=>ROLE==='admin';
 function setRole(e){e=(e||'').toLowerCase();const R=window.ROLES||{};ROLE=(R.viewers||[]).includes(e)?'viewer':(R.staff||[]).includes(e)?'staff':(R.admins||[]).includes(e)?'admin':(R.admins?'staff':'admin')}
 const who=()=>{try{return firebase.auth().currentUser.email}catch(e){return''}};
 function logIt(m){if(DB)DB.collection('logs').add({ts:Date.now(),by:who(),m}).catch(()=>{})}
@@ -64,8 +64,8 @@ function startSync(){unsubs.forEach(u=>u());unsubs=['parties','items','txs','log
 function loginScreen(){$('#back').style.visibility='hidden';$('#ttl').textContent='تسجيل الدخول';html(`<div class="card"><label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username"><label>كلمة المرور</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" onclick="doLogin()">دخول</button><div class="empty" id="lerr"></div></div>`)}
 function doLogin(){firebase.auth().signInWithEmailAndPassword($('#em').value.trim(),$('#pw').value).catch(()=>{$('#lerr').textContent='بيانات الدخول غير صحيحة'})}
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
-const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',aging:'أعمار الديون',stmtp:'كشف حساب للإرسال',backup:'نسخة احتياطية'};
-const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs,aging,stmtp:a=>{sf='';st='';stmtView(a)}};
+const T={home:'حسابات ومخازن',sale:'فاتورة مبيعات',purchase:'فاتورة مشتريات',return:'مرتجع مبيعات',preturn:'مرتجع مشتريات',payin:'سداد عميل',payout:'سداد مورد',expense:'المصروفات والإيرادات',party:'عميل / مورد جديد',parties:'العملاء والموردين',item:'صنف',stock:'جرد الأصناف',cash:'حركة الخزينة',rep:'تقارير فورية',stmt:'كشف حساب',inv:'مستند',logs:'سجل النشاط',aging:'أعمار الديون',count:'جرد وتسوية المخزون',stmtp:'كشف حساب للإرسال',backup:'نسخة احتياطية'};
+const scr={home,sale:()=>invForm('sale'),purchase:()=>invForm('purchase'),return:()=>invForm('return'),preturn:()=>invForm('preturn'),payin:()=>payForm('payin'),payout:()=>payForm('payout'),expense:expForm,party:partyForm,parties,item:itemForm,stock,cash,rep,stmt,backup,inv,logs,aging,count,stmtp:a=>{sf='';st='';stmtView(a)}};
 let curArg,rf=today(),rt=today();
 function go(s,a){if(!canW()&&WR.includes(s))return toast('صلاحيتك للعرض فقط');cur=s;curArg=a;ctx=null;$('#ttl').textContent=T[s]||'';$('#back').style.visibility=s==='home'?'hidden':'visible';scr[s](a);scrollTo(0,0)}
 const html=h=>$('#app').innerHTML=h;
@@ -75,7 +75,7 @@ function home(){
  const cash=S.txs.reduce((a,t)=>a+cashOf(t),0),td=S.txs.filter(t=>t.k==='sale'&&t.d===today()).reduce((a,t)=>a+t.total,0);
  const tiles=[['sale','🧾'],['purchase','📥'],['payin','🤝'],['payout','💸'],['expense','📒'],['return','↩️'],['preturn','↪️'],['party','➕'],['parties','📇'],['item','🏷️'],['stock','📦'],['cash','🏦'],['rep','📊'],['aging','⏳'],['logs','📜'],['backup','💾']];
  html(`<div class="stat"><div><small>رصيد الخزينة</small><b>${fmt(cash)}</b></div><div><small>مبيعات اليوم</small><b>${fmt(td)}</b></div></div>
- <div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup','aging'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
+ ${lowItems().length?`<div class="card" onclick="go('stock','low')" style="border-color:var(--bad);cursor:pointer">⚠️ ${lowItems().length} صنف وصل للحد الأدنى — اضغط للعرض</div>`:''}<div class="grid">${tiles.filter(([k])=>canW()||['parties','stock','cash','rep','logs','backup','aging'].includes(k)).map(([k,i])=>`<button class="tile" onclick="go('${k}')"><span>${i}</span>${T[k]}</button>`).join('')}</div>`)}
 
 function invForm(k){
  ctx={k,lines:[{iid:'',q:1,p:0}],total:0};const isP=k==='purchase'||k==='preturn',pt=isP?'supplier':'customer';
@@ -127,10 +127,10 @@ function stmt(id){
 function itemForm(id){
  const it=id?I(id):{name:'',qty:0,cost:'',price:''};ctx={id};
  html(`<div class="card"><label>اسم الصنف</label><input id="nm" value="${esc(it.name)}"><label>الكمية بالمخزن</label><input type="number" inputmode="decimal" id="q" value="${it.qty}">
- <label>سعر الشراء</label><input type="number" inputmode="decimal" id="c" value="${it.cost}"><label>سعر البيع</label><input type="number" inputmode="decimal" id="p" value="${it.price}">
+ <label>سعر الشراء</label><input type="number" inputmode="decimal" id="c" value="${it.cost}"><label>سعر البيع</label><input type="number" inputmode="decimal" id="p" value="${it.price}"><label>الحد الأدنى للتنبيه (اختياري)</label><input type="number" inputmode="decimal" id="mn" value="${it.min||''}">
  <button class="btn" onclick="saveItem()">حفظ</button>${id&&canD()?'<button class="btn sec" style="color:var(--bad);border-color:var(--bad)" onclick="delItem()">🗑 مسح الصنف</button>':''}</div>`)}
 function saveItem(){const nm=$('#nm').value.trim();if(!nm)return toast('اكتب اسم الصنف');
- const o={name:nm,qty:+$('#q').value||0,cost:+$('#c').value||0,price:+$('#p').value||0};
+ const o={name:nm,qty:+$('#q').value||0,cost:+$('#c').value||0,price:+$('#p').value||0,min:+$('#mn').value||0};
  let it;if(ctx.id){it=I(ctx.id);Object.assign(it,o)}else{it={id:uid(),...o};S.items.push(it)}persist('items',it);save();toast('تم الحفظ');go('stock')}
 function delItem(){const it=I(ctx.id);if(!it||!confirm('مسح الصنف '+it.name+'؟ الفواتير القديمة هتفضل زي ما هي.'))return;logIt('مسح الصنف '+it.name);S.items=S.items.filter(x=>x.id!==it.id);if(DB)DB.collection('items').doc(it.id).delete().catch(()=>toast('تعذر المسح'));save();toast('تم المسح');go('stock')}
 function undoStock(t){(t.lines||[]).forEach(l=>{const it=S.items.find(x=>x.name===l.n);if(!it)return;it.qty+=((t.k==='sale'||t.k==='preturn')?l.q:-l.q);persist('items',it)})}
@@ -190,10 +190,17 @@ function aging(ty){
  <tr><th>الإجمالي</th>${T.map(v=>'<th>'+fmt(v)+'</th>').join('')}<th>${fmt(T.reduce((a,c)=>a+c,0))}</th></tr></table></div>
  <div class="empty">المدفوعات والمرتجعات بتتحسب على أقدم فاتورة الأول.</div></div>
  <button class="btn no-print" onclick="print()">🖨️ طباعة / حفظ PDF</button>`)}
-function stock(){
+const lowItems=()=>S.items.filter(i=>i.min>0&&i.qty<=i.min);
+function count(){
+ html(`<div class="card"><div class="empty" style="padding:0 0 8px">اكتب الكمية الفعلية اللي عدّيتها. الفرق بيتعدّل في المخزون ويتسجل في سجل النشاط.</div>
+ ${S.items.map(i=>`<div class="row"><div>${esc(i.name)}<small>بالنظام: ${fmt(i.qty)}</small></div><input type="number" inputmode="decimal" style="width:90px" placeholder="الفعلي" data-id="${i.id}" oninput="cdiff(this)"><b style="width:60px;text-align:left"></b></div>`).join('')||'<div class="empty">لا توجد أصناف</div>'}
+ <button class="btn" onclick="applyCount()">اعتماد التسوية</button></div>`)}
+function cdiff(el){const it=I(el.dataset.id),b=el.nextElementSibling;if(el.value===''){b.textContent='';return}const d=+el.value-it.qty;b.textContent=d?(d>0?'+':'')+fmt(d):'✓';b.className=d<0?'neg':d>0?'pos':''}
+function applyCount(){const ch=[];document.querySelectorAll('[data-id]').forEach(el=>{if(el.value==='')return;const it=I(el.dataset.id),n=+el.value;if(!it||n===it.qty)return;ch.push(it.name+': '+fmt(it.qty)+' ← '+fmt(n));it.qty=n;persist('items',it)});if(!ch.length)return toast('لا توجد فروق');logIt('تسوية جرد: '+ch.join('، '));save();toast('تمت التسوية');go('stock')}
+function stock(a){
  const v=S.items.reduce((a,i)=>a+i.qty*i.cost,0);
- html(`<div class="card"><button class="btn sec" style="margin:0" onclick="go('item')">+ صنف جديد</button><div class="tot">قيمة المخزون: <b>${fmt(v)}</b></div></div>
- <input placeholder="🔍 بحث" oninput="filt(this.value)" style="margin-bottom:10px"><div class="card srch">${S.items.map(i=>`<div class="row" onclick="go('item','${i.id}')"><div>${esc(i.name)}<small>شراء ${fmt(i.cost)} · بيع ${fmt(i.price)}</small></div><b class="${i.qty<=0?'neg':''}">${fmt(i.qty)}</b></div>`).join('')||'<div class="empty">لا توجد أصناف</div>'}</div>`)}
+ html(`<div class="card"><button class="btn sec" style="margin:0" onclick="go('item')">+ صنف جديد</button><button class="btn sec" onclick="go('count')">📋 جرد وتسوية المخزون</button><button class="btn sec" onclick="go('stock','${a==='low'?'':'low'}')">${a==='low'?'عرض كل الأصناف':'⚠️ عرض النواقص فقط'}</button><div class="tot">قيمة المخزون: <b>${fmt(v)}</b></div></div>
+ <input placeholder="🔍 بحث" oninput="filt(this.value)" style="margin-bottom:10px"><div class="card srch">${S.items.filter(i=>a!=='low'||(i.min>0&&i.qty<=i.min)).map(i=>`<div class="row" onclick="go('item','${i.id}')"><div>${esc(i.name)}<small>شراء ${fmt(i.cost)} · بيع ${fmt(i.price)}</small></div><b class="${i.qty<=0||(i.min>0&&i.qty<=i.min)?'neg':''}">${fmt(i.qty)}</b></div>`).join('')||'<div class="empty">لا توجد أصناف</div>'}</div>`)}
 
 function cash(){
  const L=S.txs.map((t,i)=>({t,i,c:cashOf(t)})).filter(x=>x.c).sort((a,b)=>a.t.d.localeCompare(b.t.d)||a.i-b.i);let r=0;L.forEach(x=>{r+=x.c;x.r=r});
